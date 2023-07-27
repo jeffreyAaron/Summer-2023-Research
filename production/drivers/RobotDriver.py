@@ -11,8 +11,6 @@ class RobotDriver:
             timeout=1
         )
 
-    def setSteering(self, steering):
-        self.robotSerial.write((str(steering)).encode())
-        self.robotSerial.write(b"\r\n")
-
-        print(str(steering).encode())
+    def sendBytes(self, bytesa):
+        self.robotSerial.write(bytesa)
+        #print(steering)

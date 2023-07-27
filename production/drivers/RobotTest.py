@@ -14,7 +14,7 @@ context = zmq.Context()
 socket = context.socket(zmq.PAIR)
 socket.bind("tcp://*:%s" % port)
 
-robot = RobotDriver(prt="/dev/cu.usbserial-120")
+robot = RobotDriver(prt="/dev/cu.usbserial-110")
 
 while(True):
     msg = socket.recv()
