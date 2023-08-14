@@ -4,6 +4,7 @@ import random
 import fnmatch
 import datetime
 import pickle
+import statistics
 
 # data processing
 import numpy as np
@@ -88,6 +89,10 @@ count = 0
 
 socket.send(bytearray([71]))
 
+recentValues = []
+
+steerArray = [0]
+
 while True:
  #msg_bytes = socket.recv()
  
@@ -112,10 +117,17 @@ while True:
     # load the ArUCo dictionary, grab the ArUCo parameters, and detect
    
 
-
     print(int(angle_to_steer[0]))
     
-    steerArray = [abs(int(angle_to_steer[0] + 10))]
+    # steerArray[0] = int(steerArray[0] * 0.5 + 0.5 * abs(angle_to_steer[0] + 10))
+
+    recentValues.append(steerArray[0])
+
+    if(len(recentValues) > 4):
+        recentValues.pop(0)
+        steerArray[0] = int(statistics.median(recentValues))
+
+
 
     socket.send(bytearray(steerArray))
 
