@@ -21,6 +21,7 @@ CENTER_H = int(IMAGE_HEIGHT/2)
 MAJOR_ARROW_LENGTH = 300
 MINOR_ARROW_LENGTH = 100
 
+HIGH_PERFORMANCE = False
 
 
 # COLORS (B, G, R)
@@ -32,7 +33,7 @@ BLUE = (255, 0, 0)
 
 # global vars
 angle_to_turn = 0
-speed_of_car = 50
+speed_of_car = 50 # m/s
 
 accelX = 0
 accelY = 0
@@ -93,16 +94,28 @@ def path(x0,y0,xf,yf,traj_coeff):
     #     [a*xf**3, b*xf**2, c*xf, d],
     #     [3*a*xf**2, 2*b*xf, c, 0]
     # ])
+    # A = np.array([
+    #     [x0**3, x0**2, x0, 1],
+    #     [3*x0**2, 2*x0, 1, 0],
+    #     [xf**3, xf**2, xf, 1],
+    #     [3*xf**2, 2*xf, 1, 0]
+    # ])
+
+    # b = np.array([
+    #     [float(y0)],
+    #     [0],
+    #     [float(yf)],
+    #     [float(3*a*xf**2 + 2*b*xf + c)]
+    # ])
+
     A = np.array([
-        [x0**3, x0**2, x0, 1],
-        [3*x0**2, 2*x0, 1, 0],
-        [xf**3, xf**2, xf, 1],
-        [3*xf**2, 2*xf, 1, 0]
+        [x0**2, x0, 1],
+        [xf**2, xf, 1],
+        [2*xf, 1, 0]
     ])
 
     b = np.array([
         [float(y0)],
-        [0],
         [float(yf)],
         [float(3*a*xf**2 + 2*b*xf + c)]
     ])
@@ -119,6 +132,10 @@ def evalPolynomial(coeff, power, lspace):
 
 def drawPolynomialEquation(frame, coeff, power, thickness=10, Xrestricted = False, x_start = 0, x_end = 0, color = BLUE, color1 = RED, gradient = False):
     polynomial_line_of_fit = 0
+
+    if(HIGH_PERFORMANCE):
+        gradient = False
+
     lspace = np.linspace(0,  frame.shape[0]-1, frame.shape[0])
     if(Xrestricted):
         lspace = np.linspace(int(x_start), int(x_end), int(x_end-x_start))
@@ -129,9 +146,9 @@ def drawPolynomialEquation(frame, coeff, power, thickness=10, Xrestricted = Fals
     
     if(gradient):
         row, col = verts.shape
-        curvature = findCurvature(coeff, power, lspace)
-        maxCurve = np.max(curvature)
-        minCurve = np.min(curvature)
+        curvature = np.abs(findCurvature(coeff, power, lspace))
+        maxCurve = np.max(np.abs(curvature))
+        minCurve = np.min(np.abs(curvature))
         for i in range(0, row-1):
             
             colorCurve = interpolateColors(minCurve, maxCurve, curvature[i], color, color1)
@@ -145,16 +162,22 @@ def interpolateColors(startRange, endRange, value, minColor, maxColor):
     percent = (value-startRange)/range
     return tuple(np.asarray(maxColor)*percent + np.asarray(minColor)*(1-percent)) 
 
-
-def findCurvature(coeff, power, lspace):
+def firstDeriv(coeff, power, lspace):
     firstDerivative = 0
     for i in range(0, power+1):
         firstDerivative += (power-i)*coeff[i]*(lspace**(power-i-1))
+    return firstDerivative
 
+def secondDeriv(coeff, power, lspace):
     secondDerivative = 0
     for i in range(0, power+1):
         secondDerivative += (power-i-1)*(power-i)*coeff[i]*(lspace**(power-i-2))
+    return secondDerivative
 
+def findCurvature(coeff, power, lspace):
+    firstDerivative = firstDeriv(coeff, power, lspace)
+    
+    secondDerivative = secondDeriv(coeff, power, lspace)
 
     curvature = abs(secondDerivative)/((1+firstDerivative**2)**1.5)
 
@@ -172,21 +195,6 @@ def drawGraphics(frame):
     cv.line(frame, (CENTER_W, IMAGE_HEIGHT-MINOR_ARROW_LENGTH), (CENTER_W, IMAGE_HEIGHT),  BLACK, thickness=t)
     drawAngleLine(frame, MAJOR_ARROW_LENGTH, angle_to_turn)
 
-    # draw the accel indicator
-    w = 200
-    cv.ellipse(frame, (w, w),  (w, w), 0, 0, 360, BLACK, thickness=10) # solid circle
-    crsH = 3
-    cv.line(frame, pt1=(w, 0), pt2=(w, w*2), color=BLACK, thickness=crsH)
-    cv.line(frame, pt1=(0, w), pt2=(w*2, w), color=BLACK, thickness=crsH)
-
-    centerX = int(accelX*100) + w
-    centerY = int(accelY*100) + w
-
-    l = 20
-    crsHS = 6
-    cv.line(frame, pt1=(centerX-l, centerY), pt2=(centerX+l, centerY), color=BLACK, thickness=crsHS)
-    cv.line(frame, pt1=(centerX, centerY-l), pt2=(centerX, centerY+l), color=BLACK, thickness=crsHS)
-
 
 
 def drawAngleLine(frame, radius, angle, x=CENTER_W, y=IMAGE_HEIGHT, color=BLACK, thickness = 10):
@@ -196,7 +204,8 @@ def drawAngleLine(frame, radius, angle, x=CENTER_W, y=IMAGE_HEIGHT, color=BLACK,
         color, thickness)
 
 def calculateCommandBasedOnSpeed(speed):
-    return int(speed_of_car/255*(255-180)+180)
+    augmented_speed = 147.997*speed + 123.74
+    return int(min(255, max(181, augmented_speed)))
 
 def parseData(dataBytes):
     dataPoints = dataBytes.decode().split(",")
@@ -211,8 +220,9 @@ def parseData(dataBytes):
 
     
 
-i = 0
+# i = 0
 wantsToStart = False
+startTime = time.time()
 while True:
     ret, frame = cap.read()
     # frame = cv.imread("./testimage.png")
@@ -229,8 +239,8 @@ while True:
     frameP = processFrame(frame)
     coeff = getEquationOfPath(frameP, power=3)
 
-    print("frame " + str(i))
-    i+=1
+    # print("frame " + str(i))
+    # i+=1
     if(not (coeff is None)):
         drawPolynomialEquation(frame, coeff, power=3, thickness=25, gradient=True)
 
@@ -241,16 +251,32 @@ while True:
         targetY = evalPolynomial(coeff, power=3, lspace=np.array([targetX]))[0]
 
         coeffP = path(startX, startY, targetX, targetY, coeff)
-        drawPolynomialEquation(frame, coeffP, power=3, thickness=10, color=BLACK, color1=GRAY, Xrestricted=True, x_start=targetX, x_end=startX, gradient=True)
+        drawPolynomialEquation(frame, coeffP, power=2, thickness=10, color=BLACK, color1=GRAY, Xrestricted=True, x_start=targetX, x_end=startX, gradient=True)
 
         # calc angle
-        angle_to_turn = -math.atan(((targetY-startY)/(targetX-startX)))*180/math.pi
+        # angle_to_turn = -math.atan(((targetY-startY)/(targetX-startX)))*180/math.pi
+        angle_to_turn = -math.atan(firstDeriv(coeffP, power=2, lspace=np.array([startX]).astype(float))[0])*180/math.pi
         augmented_angle = 3.72 * angle_to_turn/2 + 66.5 # calibration
+        # augmented_angle = angle_to_turn + 90 # calibration
 
-        steerArray = [int(min(180, max(0, augmented_angle))), int(min(181, max(200, 200+15-abs(angle_to_turn))))] # range of values for servo is 0-180
-        socket.send(bytearray(steerArray))
-        dataBytes = socket.recv()
-        parseData(dataBytes)
+
+        # augmented_angle = 90
+
+        speed_of_car = 200+55-abs(angle_to_turn*1.2)
+        speed_of_car = 190
+
+        steerArray = [int(min(180, max(0, augmented_angle))), 200] # range of values for servo is 0-180
+        # socket.send(bytearray(steerArray))
+        # dataBytes = socket.recv()
+        # parseData(dataBytes)
+
+        endTime = time.time()
+
+        fps = int(1/(endTime-startTime))
+        if(HIGH_PERFORMANCE):
+            print(fps)
+        startTime = endTime
+        
 
     
     drawGraphics(frame)
@@ -259,10 +285,11 @@ while True:
     #     break
 
     cv.imshow("frame", frame)
-    # cv.imshow("frameP", frameP)
+    cv.imshow("frameP", frameP)
 
     if cv.waitKey(1) == ord('p'):
         socket.send(bytearray([181])) # stop the car
+        socket.send(bytearray([90]))
         break
 
 
